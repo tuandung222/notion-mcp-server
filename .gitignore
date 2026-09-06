@@ -1,0 +1,16 @@
+# Dependencies
+node_modules/
+
+# Build Output
+dist/
+
+# Environment Variables
+.env
+.env.local
+
+# Upstream Reference
+reference/
+
+# OS Files
+.DS_Store
+*.log
