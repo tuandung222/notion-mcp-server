@@ -7,6 +7,7 @@ import { registerMermaidTools } from "./tools/mermaid-tools.js";
 import { registerPageTools } from "./tools/page-tools.js";
 import { registerSearchTools } from "./tools/search-tools.js";
 import { registerBookTools } from "./tools/book-tools.js";
+import { registerHtmlEmbedTools } from "./tools/html-embed-tools.js";
 
 dotenv.config();
 
@@ -24,6 +25,7 @@ async function main() {
   registerPageTools(server, notion);
   registerSearchTools(server, notion);
   registerBookTools(server, notion);
+  registerHtmlEmbedTools(server, notion);
 
   // Connect stdio transport
   const transport = new StdioServerTransport();

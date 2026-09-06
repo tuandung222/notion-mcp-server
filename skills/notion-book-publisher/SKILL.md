@@ -15,6 +15,13 @@ Kỹ năng này hướng dẫn AI Agent cách tổ chức, biên soạn, dịch 
 2. **Quy Chuẩn Định Dạng (Strict Notion Formatting)**:
    - **Tuyệt đối không gửi raw markdown** (`**bold**`, `*italic*`, `` `code` ``) dạng plain text vào Notion.
    - **Bắt buộc dùng Native Mermaid Block** (`language: "mermaid"`) cho sơ đồ kiến trúc. Không dùng ASCII Art.
+   - **Sử dụng HTML Embed (`embed`)** cho các biểu đồ tương tác, benchmark dashboard, hoặc simulator trực tiếp:
+     ```markdown
+     ```html-embed
+     https://your-host.com/interactive-report.html
+     ```
+     hoặc `<iframe src="https://your-host.com/interactive-report.html"></iframe>`
+     ```
 3. **Cơ Chế Đồng Bộ Gia Tăng (Incremental Sync)**:
    - Khi cập nhật sách, chỉ cập nhật những chương có nội dung thay đổi (so khớp mã băm SHA256 `FileHash`).
 

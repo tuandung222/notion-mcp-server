@@ -18,6 +18,7 @@ const SUPPORTED_CODE_LANGUAGES = new Set([
 
 function normalizeCodeLanguage(lang: string): string {
   const clean = lang.trim().toLowerCase();
+  if (clean === "html-embed" || clean === "embed") return "html-embed";
   if (clean === "js") return "javascript";
   if (clean === "ts") return "typescript";
   if (clean === "py") return "python";
@@ -52,6 +53,18 @@ export function markdownToNotionBlocks(markdown: string): any[] {
         const codeContent = codeBuffer.join("\n");
         if (codeLanguage === "mermaid") {
           blocks.push(...createSafeMermaidNotionBlocks(codeContent));
+        } else if (codeLanguage === "html-embed") {
+          const url = codeContent.trim();
+          if (url.startsWith("http://") || url.startsWith("https://")) {
+            blocks.push({
+              object: "block",
+              type: "embed",
+              embed: {
+                url,
+                caption: [],
+              },
+            });
+          }
         } else {
           blocks.push({
             object: "block",
@@ -93,6 +106,22 @@ export function markdownToNotionBlocks(markdown: string): any[] {
         object: "block",
         type: "divider",
         divider: {},
+      });
+      continue;
+    }
+
+    // HTML iframe / embed (<iframe src="https://..."> or <embed src="https://...">)
+    const iframeMatch = trimmed.match(
+      /<(?:iframe|embed)\b[^>]*\bsrc=["'](https?:\/\/[^"']+)["'][^>]*>/i
+    );
+    if (iframeMatch) {
+      blocks.push({
+        object: "block",
+        type: "embed",
+        embed: {
+          url: iframeMatch[1],
+          caption: [],
+        },
       });
       continue;
     }
@@ -286,6 +315,9 @@ export function notionBlocksToMarkdown(blocks: any[], indentLevel: number = 0): 
         markdownLines.push(
           `\`\`\`${data.language || ""}\n${richTextToMarkdown(data.rich_text)}\n\`\`\`\n`
         );
+        break;
+      case "embed":
+        markdownLines.push(`<iframe src="${data.url}"></iframe>\n`);
         break;
       default:
         if (data?.rich_text) {
