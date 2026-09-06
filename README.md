@@ -95,39 +95,60 @@ Notion MCP/
 
 ---
 
-## 🛠️ MCP Tools Reference
+## 🛠️ MCP Tools Reference (12 Production-Ready Tools)
 
-### 1. `notion_sync_book_database` *(Core Publishing Engine)*
-- **Description**: Scans a local directory of Markdown files and publishes them as a structured Master Book Hub with an Inline Database for progress tracking.
-- **Parameters**:
-  - `folder_path` *(string, required)*: Absolute path to the directory containing `.md` files.
-  - `parent_page_id` *(string, required)*: Parent Notion Page ID where the book will reside.
-  - `book_title` *(string, optional)*: Title of the book (defaults to folder name).
-  - `book_icon` *(string, default: `📚`)*: Emoji icon for the Master Page.
-  - `enable_footer_nav` *(boolean, default: `true`)*: Automatically generates previous/next chapter navigation links at the footer of each page.
-  - `force_update` *(boolean, default: `false`)*: Forces re-upload of all chapters regardless of checksum matches.
+### 📚 Publishing & Series Orchestration
+1. **`notion_sync_book_database`** *(Flagship Book Publishing Engine)*:
+   - **Description**: Scans a local directory of Markdown files, computes SHA-256 checksums, creates a Master Book Hub with an Inline Database for progress tracking, and injects `[⬅️ Prev] • [🏠 TOC] • [Next ➡️]` footers. Unchanged files are safely skipped (`Skipped (No change)`).
+   - **Parameters**: `folder_path` (req), `parent_page_id` (req), `book_title`, `book_icon`, `enable_footer_nav`, `force_update`.
 
-### 2. `notion_insert_html_embed` *(Interactive Visualization)*
-- **Description**: Inserts an interactive HTML Embed block into a Notion page, rendering live HTML5 dashboards, benchmark charts, and visual simulators in a sandboxed iframe.
-- **Parameters**:
-  - `page_id` *(string, required)*: Target page or block ID.
-  - `url` *(string, required)*: Public URL of the HTML document (e.g. hosted on GitHub Pages, S3, or Vercel).
-  - `caption` *(string, optional)*: Caption text displayed below the embed.
+### 📊 Databases & Structured Knowledge
+2. **`notion_query_database`**:
+   - **Description**: Queries records from a Notion Database with schema-aware filtering (auto-adapting to `select`, `status`, `multi_select`, `title`, `rich_text`, `number`, `checkbox`) and multi-directional sorting. Returns clean JSON records.
+   - **Parameters**: `database_id` (req), `filter_property`, `filter_value`, `sort_property`, `sort_direction`, `page_size`.
 
-### 3. `notion_insert_mermaid`
-- **Description**: Inserts a native Mermaid diagram block (`language: "mermaid"`) with automatic syntax healing (auto-quoting, subgraph balancing, arrow normalization) and graceful fallback.
-- **Parameters**: `block_id`, `mermaid_code`, `caption`.
+3. **`notion_create_database`**:
+   - **Description**: Creates arbitrary Notion databases under any parent page with full custom column schema definitions (`title`, `select`, `multi_select`, `status`, `number`, `checkbox`, `date`, `rich_text`).
+   - **Parameters**: `parent_page_id` (req), `title` (req), `is_inline`, `properties_schema`.
 
-### 4. `notion_append_markdown`
-- **Description**: Parses standard Markdown text and safely appends it to a Notion page in 100-block chunks with proper inline formatting annotations.
-- **Parameters**: `block_id`, `markdown`.
+### 📄 Pages & Content Lifecycle
+4. **`notion_create_page`**:
+   - **Description**: Creates standalone pages or database rows with custom titles, emoji icons, cover banners, and initial markdown content.
+   - **Parameters**: `parent_id` (req), `parent_type` (`"page_id"` | `"database_id"`), `title` (req), `icon_emoji`, `cover_url`, `initial_markdown`.
 
-### 5. `notion_get_page_content`
-- **Description**: Recursively retrieves all child blocks of a Notion page and converts them back into clean Markdown or structured JSON.
-- **Parameters**: `page_id`, `format` (`"markdown"` | `"json"`), `recursive` (boolean), `max_depth` (number).
+5. **`notion_update_page`**:
+   - **Description**: Updates page metadata (title, icon emoji, cover image), archives/deletes pages, or updates typed database row properties (`Status`, `Tags`, `Order`, `Slug`, etc.) with dynamic schema detection.
+   - **Parameters**: `page_id` (req), `title`, `icon_emoji`, `cover_url`, `archived`, `properties`.
 
-### 6. `notion_create_page` & `notion_search`
-- **Description**: Creates new standalone pages or searches pages and databases across the workspace.
+6. **`notion_get_page_content`**:
+   - **Description**: Recursively extracts all child blocks from a Notion page and converts them back into clean Markdown or structured JSON.
+   - **Parameters**: `page_id` (req), `format` (`"markdown"` | `"json"`), `recursive`, `max_depth`.
+
+### 📝 Markdown & Advanced Media
+7. **`notion_append_markdown`**:
+   - **Description**: Parses standard Markdown and safely appends blocks in 100-block batches with 350ms delays and exponential backoff retry. Accurately tokenizes inline `**bold**`, `*italic*`, `` `code` ``, and links.
+   - **Parameters**: `block_id` (req), `markdown` (req).
+
+8. **`notion_update_page_markdown`**:
+   - **Description**: Calls Notion's Enhanced Markdown API endpoint (`replace_content` or `update_content`) for direct Markdown replacement.
+   - **Parameters**: `page_id` (req), `markdown` (req), `type`.
+
+9. **`notion_insert_mermaid`**:
+   - **Description**: Inserts a native Mermaid block (`language: "mermaid"`) with automatic syntax healing (auto-quotes brackets/parentheses in node labels, balances unclosed `subgraph ... end`, normalizes arrows) and graceful fallback.
+   - **Parameters**: `block_id` (req), `mermaid_code` (req), `caption`.
+
+10. **`notion_insert_html_embed`**:
+    - **Description**: Inserts native sandboxed Notion iframe embeds (`type: "embed"`) for interactive HTML5 dashboards, benchmark graphs, and simulators.
+    - **Parameters**: `page_id` (req), `url` (req), `caption`.
+
+### 🧱 Blocks & Global Search
+11. **`notion_delete_block`**:
+    - **Description**: Deletes or archives a specific block by ID without needing to rebuild or re-upload the entire page.
+    - **Parameters**: `block_id` (req).
+
+12. **`notion_search`**:
+    - **Description**: Performs global workspace-wide searches for pages and databases matching a query text.
+    - **Parameters**: `query`, `filter_type` (`"page"` | `"database"`), `page_size`.
 
 ---
 
@@ -157,14 +178,11 @@ The compiled single-file bundle will be generated at `server/dist/index.js`.
 
 ### 4. Running Test Suites
 ```bash
-# Test Markdown & RichText tokenizers
-npx tsx test/test-converters.ts
+# Run unit tests (Converters, Mermaid auto-healing, HTML Embed parser)
+npm test
 
-# Test Mermaid auto-healing & graceful fallback (5 test cases)
-npx tsx test/test-mermaid-sanitizer.ts
-
-# Test HTML Embed & iframe parser
-npx tsx test/test-html-embed.ts
+# Run full live Notion CRUD verification (Query, Update, Create Database, Delete Block)
+npx tsx test/test-crud-suite.ts
 
 # Run live end-to-end book sync test against Notion
 npx tsx test/test-sync-book.ts

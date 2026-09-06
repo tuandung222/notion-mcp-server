@@ -479,5 +479,363 @@ export class NotionService {
       return { pageId: createdPage.id, action: "created" };
     }
   }
+
+  /**
+   * Delete or archive a single block
+   */
+  async deleteBlock(blockId: string): Promise<any> {
+    const cleanId = blockId.replace(/-/g, "");
+    return await withRetry(async () => {
+      return await this.client.blocks.delete({ block_id: cleanId });
+    });
+  }
+
+  /**
+   * Update page metadata, title, icon, cover, archive status, or database properties
+   */
+  async updatePage(params: {
+    pageId: string;
+    title?: string;
+    iconEmoji?: string;
+    coverUrl?: string;
+    archived?: boolean;
+    properties?: Record<string, any>;
+  }): Promise<any> {
+    const cleanId = params.pageId.replace(/-/g, "");
+    const payload: any = {
+      page_id: cleanId,
+    };
+
+    if (params.archived !== undefined) {
+      payload.archived = params.archived;
+    }
+
+    if (params.iconEmoji) {
+      payload.icon = { type: "emoji" as const, emoji: params.iconEmoji };
+    }
+
+    if (params.coverUrl) {
+      payload.cover = {
+        type: "external" as const,
+        external: { url: params.coverUrl },
+      };
+    }
+
+    const builtProperties: Record<string, any> = {};
+
+    if (params.title) {
+      builtProperties.title = [
+        {
+          text: {
+            content: params.title,
+          },
+        },
+      ];
+    }
+
+    if (params.properties) {
+      let pageSchema: Record<string, any> | undefined;
+      try {
+        const pageInfo: any = await withRetry(async () => {
+          return await this.client.pages.retrieve({ page_id: cleanId });
+        });
+        pageSchema = pageInfo.properties;
+      } catch (e) {
+        // ignore if fails, fallback to heuristic
+      }
+
+      for (const [key, val] of Object.entries(params.properties)) {
+        const propSchema = pageSchema?.[key];
+        const propType = propSchema?.type;
+
+        if (
+          val &&
+          typeof val === "object" &&
+          !Array.isArray(val) &&
+          ("select" in val ||
+            "rich_text" in val ||
+            "status" in val ||
+            "multi_select" in val ||
+            "title" in val ||
+            "number" in val ||
+            "checkbox" in val)
+        ) {
+          // Direct raw Notion property structure
+          builtProperties[key] = val;
+        } else if (propType) {
+          switch (propType) {
+            case "select":
+              builtProperties[key] = { select: val ? { name: String(val) } : null };
+              break;
+            case "status":
+              builtProperties[key] = { status: val ? { name: String(val) } : null };
+              break;
+            case "multi_select":
+              const arr = Array.isArray(val) ? val : [val];
+              builtProperties[key] = {
+                multi_select: arr.map((v: any) => ({ name: String(v) })),
+              };
+              break;
+            case "rich_text":
+              builtProperties[key] = {
+                rich_text: [
+                  {
+                    type: "text",
+                    text: { content: String(val ?? "") },
+                  },
+                ],
+              };
+              break;
+            case "title":
+              builtProperties[key] = {
+                title: [
+                  {
+                    type: "text",
+                    text: { content: String(val ?? "") },
+                  },
+                ],
+              };
+              break;
+            case "number":
+              builtProperties[key] = {
+                number: val !== null && val !== undefined ? Number(val) : null,
+              };
+              break;
+            case "checkbox":
+              builtProperties[key] = {
+                checkbox: Boolean(val),
+              };
+              break;
+            default:
+              builtProperties[key] =
+                typeof val === "object"
+                  ? val
+                  : {
+                      rich_text: [
+                        {
+                          type: "text",
+                          text: { content: String(val ?? "") },
+                        },
+                      ],
+                    };
+              break;
+          }
+        } else {
+          // Fallback heuristic if pageSchema not available
+          if (typeof val === "string") {
+            builtProperties[key] = { select: { name: val } };
+          } else if (Array.isArray(val)) {
+            builtProperties[key] = {
+              multi_select: val.map((v: string) => ({ name: String(v) })),
+            };
+          } else if (typeof val === "number") {
+            builtProperties[key] = { number: val };
+          } else if (typeof val === "boolean") {
+            builtProperties[key] = { checkbox: val };
+          } else if (val && typeof val === "object") {
+            builtProperties[key] = val;
+          }
+        }
+      }
+    }
+
+    if (Object.keys(builtProperties).length > 0) {
+      payload.properties = builtProperties;
+    }
+
+    return await withRetry(async () => {
+      return await this.client.pages.update(payload);
+    });
+  }
+
+  /**
+   * Query database with flexible filter and sort
+   */
+  async queryDatabase(params: {
+    databaseId: string;
+    filterProperty?: string;
+    filterValue?: string;
+    sortProperty?: string;
+    sortDirection?: "ascending" | "descending";
+    pageSize?: number;
+  }): Promise<{ total: number; results: any[] }> {
+    const cleanId = params.databaseId.replace(/-/g, "");
+    let filter: any = undefined;
+
+    if (params.filterProperty && params.filterValue !== undefined) {
+      let propType: string | undefined;
+      try {
+        const dbInfo: any = await withRetry(async () => {
+          return await this.client.databases.retrieve({ database_id: cleanId });
+        });
+        propType = dbInfo.properties?.[params.filterProperty]?.type;
+      } catch (err) {
+        // ignore error if retrieve fails
+      }
+
+      if (propType) {
+        switch (propType) {
+          case "select":
+            filter = {
+              property: params.filterProperty,
+              select: { equals: params.filterValue },
+            };
+            break;
+          case "status":
+            filter = {
+              property: params.filterProperty,
+              status: { equals: params.filterValue },
+            };
+            break;
+          case "multi_select":
+            filter = {
+              property: params.filterProperty,
+              multi_select: { contains: params.filterValue },
+            };
+            break;
+          case "title":
+            filter = {
+              property: params.filterProperty,
+              title: { contains: params.filterValue },
+            };
+            break;
+          case "rich_text":
+            filter = {
+              property: params.filterProperty,
+              rich_text: { contains: params.filterValue },
+            };
+            break;
+          case "number":
+            filter = {
+              property: params.filterProperty,
+              number: { equals: Number(params.filterValue) },
+            };
+            break;
+          case "checkbox":
+            filter = {
+              property: params.filterProperty,
+              checkbox: { equals: params.filterValue === "true" || params.filterValue === "1" },
+            };
+            break;
+          default:
+            filter = {
+              property: params.filterProperty,
+              rich_text: { contains: params.filterValue },
+            };
+            break;
+        }
+      } else {
+        // Default to rich_text if property type not determined
+        filter = {
+          property: params.filterProperty,
+          rich_text: { contains: params.filterValue },
+        };
+      }
+    }
+
+    let sorts: any = undefined;
+    if (params.sortProperty) {
+      sorts = [
+        {
+          property: params.sortProperty,
+          direction: params.sortDirection || "ascending",
+        },
+      ];
+    }
+
+    const response: any = await withRetry(async () => {
+      return await this.client.databases.query({
+        database_id: cleanId,
+        filter,
+        sorts,
+        page_size: params.pageSize || 50,
+      });
+    });
+
+    const parsedResults = response.results.map((page: any) => {
+      const props: Record<string, any> = {};
+      for (const [key, prop] of Object.entries<any>(page.properties || {})) {
+        switch (prop.type) {
+          case "title":
+            props[key] = prop.title?.[0]?.plain_text || "";
+            break;
+          case "rich_text":
+            props[key] = prop.rich_text?.[0]?.plain_text || "";
+            break;
+          case "select":
+            props[key] = prop.select?.name || null;
+            break;
+          case "multi_select":
+            props[key] = prop.multi_select?.map((m: any) => m.name) || [];
+            break;
+          case "number":
+            props[key] = prop.number;
+            break;
+          case "checkbox":
+            props[key] = prop.checkbox;
+            break;
+          case "date":
+            props[key] = prop.date?.start || null;
+            break;
+          default:
+            props[key] = prop[prop.type];
+            break;
+        }
+      }
+
+      return {
+        id: page.id,
+        url: page.url,
+        archived: page.archived,
+        createdTime: page.created_time,
+        lastEditedTime: page.last_edited_time,
+        properties: props,
+      };
+    });
+
+    return {
+      total: parsedResults.length,
+      results: parsedResults,
+    };
+  }
+
+  /**
+   * Create a generic database with customizable schema
+   */
+  async createGenericDatabase(params: {
+    parentPageId: string;
+    title: string;
+    isInline?: boolean;
+    propertiesSchema?: Record<string, any>;
+  }): Promise<any> {
+    const cleanParentId = params.parentPageId.replace(/-/g, "");
+
+    // Default schema if not provided
+    const defaultSchema: Record<string, any> = {
+      Name: { title: {} },
+      Status: {
+        select: {
+          options: [
+            { name: "Todo", color: "red" },
+            { name: "In Progress", color: "yellow" },
+            { name: "Done", color: "green" },
+          ],
+        },
+      },
+      Tags: { multi_select: {} },
+    };
+
+    const properties = params.propertiesSchema || defaultSchema;
+
+    return await withRetry(async () => {
+      return await this.client.databases.create({
+        parent: { type: "page_id", page_id: cleanParentId },
+        title: [{ type: "text", text: { content: params.title } }],
+        is_inline: params.isInline ?? true,
+        properties,
+      });
+    });
+  }
 }
+
 

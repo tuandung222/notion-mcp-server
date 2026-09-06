@@ -8,6 +8,8 @@ import { registerPageTools } from "./tools/page-tools.js";
 import { registerSearchTools } from "./tools/search-tools.js";
 import { registerBookTools } from "./tools/book-tools.js";
 import { registerHtmlEmbedTools } from "./tools/html-embed-tools.js";
+import { registerDatabaseTools } from "./tools/database-tools.js";
+import { registerBlockTools } from "./tools/block-tools.js";
 
 dotenv.config();
 
@@ -26,6 +28,8 @@ async function main() {
   registerSearchTools(server, notion);
   registerBookTools(server, notion);
   registerHtmlEmbedTools(server, notion);
+  registerDatabaseTools(server, notion);
+  registerBlockTools(server, notion);
 
   // Connect stdio transport
   const transport = new StdioServerTransport();

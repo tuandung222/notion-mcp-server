@@ -136,4 +136,72 @@ export function registerPageTools(server: any, notion: NotionService) {
       };
     }
   );
+
+  // Tool: notion_update_page
+  server.tool(
+    "notion_update_page",
+    "Update a Notion page's metadata, title, icon emoji, cover image, archive/delete status, or database row properties (Status, Tags, Numbers, Checkboxes).",
+    {
+      page_id: z
+        .string()
+        .describe("The ID of the Notion page or database row to update."),
+      title: z
+        .string()
+        .optional()
+        .describe("New title for the page."),
+      icon_emoji: z
+        .string()
+        .optional()
+        .describe("New emoji icon for the page (e.g. '✅', '🚀')."),
+      cover_url: z
+        .string()
+        .optional()
+        .describe("New external URL for page cover image."),
+      archived: z
+        .boolean()
+        .optional()
+        .describe("Set to true to archive (delete) the page, or false to restore."),
+      properties: z
+        .record(z.any())
+        .optional()
+        .describe(
+          "Key-value dictionary of database properties to update (e.g. {'Status': 'Đã hoàn thành', 'Order': 3, 'Tags': ['LLM', 'GPU']})."
+        ),
+    },
+    async ({
+      page_id,
+      title,
+      icon_emoji,
+      cover_url,
+      archived,
+      properties,
+    }: {
+      page_id: string;
+      title?: string;
+      icon_emoji?: string;
+      cover_url?: string;
+      archived?: boolean;
+      properties?: Record<string, any>;
+    }) => {
+      const cleanId = page_id.replace(/-/g, "");
+      const res = await notion.updatePage({
+        pageId: cleanId,
+        title,
+        iconEmoji: icon_emoji,
+        coverUrl: cover_url,
+        archived,
+        properties,
+      });
+
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Successfully updated page ${page_id}!\n- Title: ${(res as any).properties?.title?.title?.[0]?.plain_text || title || "(unchanged)"}\n- Archived: ${res.archived}\n- URL: ${res.url}`,
+          },
+        ],
+      };
+    }
+  );
 }
+

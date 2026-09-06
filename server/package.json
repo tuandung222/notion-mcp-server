@@ -10,7 +10,8 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsup",
-    "start": "node dist/index.js"
+    "start": "node dist/index.js",
+    "test": "tsx test/test-converters.ts && tsx test/test-mermaid-sanitizer.ts && tsx test/test-html-embed.ts"
   },
   "keywords": [
     "notion",
