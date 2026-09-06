@@ -262,4 +262,222 @@ export class NotionService {
       return response.data;
     });
   }
+
+  /**
+   * Finds an existing child database inside a parent page
+   */
+  async findDatabaseInPage(pageId: string): Promise<string | null> {
+    const blocks = await this.getAllBlockChildren(pageId, false);
+    for (const block of blocks) {
+      if (block.type === "child_database") {
+        return block.id;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Creates an inline Book / Tutorial Database inside a parent page
+   */
+  async createBookDatabase(parentPageId: string, title: string = "Mục Lục & Tiến Độ") {
+    return await withRetry(async () => {
+      return await this.client.databases.create({
+        parent: { type: "page_id", page_id: parentPageId },
+        title: [{ type: "text", text: { content: title } }],
+        is_inline: true,
+        properties: {
+          Title: { title: {} },
+          Order: { number: { format: "number" } },
+          Status: {
+            select: {
+              options: [
+                { name: "Chưa dịch", color: "red" },
+                { name: "Bản nháp", color: "yellow" },
+                { name: "Đã hoàn thành", color: "green" },
+              ],
+            },
+          },
+          Tags: { multi_select: {} },
+          Words: { number: { format: "number" } },
+          FilePath: { rich_text: {} },
+          FileHash: { rich_text: {} },
+        },
+      });
+    });
+  }
+
+  /**
+   * Queries all entries in a database to map FilePath -> Page
+   */
+  async queryDatabaseEntries(databaseId: string): Promise<
+    Array<{
+      pageId: string;
+      url: string;
+      filePath: string;
+      fileHash: string;
+      order: number;
+      title: string;
+    }>
+  > {
+    const entries: any[] = [];
+    let hasMore = true;
+    let startCursor: string | undefined = undefined;
+
+    while (hasMore) {
+      const response: any = await withRetry(async () => {
+        return await this.client.databases.query({
+          database_id: databaseId,
+          start_cursor: startCursor,
+          page_size: 100,
+        });
+      });
+
+      for (const page of response.results) {
+        const filePath =
+          page.properties?.FilePath?.rich_text?.[0]?.plain_text || "";
+        const fileHash =
+          page.properties?.FileHash?.rich_text?.[0]?.plain_text || "";
+        const order = page.properties?.Order?.number || 0;
+        const title =
+          page.properties?.Title?.title?.[0]?.plain_text ||
+          page.properties?.Name?.title?.[0]?.plain_text ||
+          "(Untitled)";
+
+        entries.push({
+          pageId: page.id,
+          url: page.url,
+          filePath,
+          fileHash,
+          order,
+          title,
+        });
+      }
+
+      hasMore = response.has_more;
+      startCursor = response.next_cursor || undefined;
+      if (hasMore) {
+        await delay(200);
+      }
+    }
+
+    return entries;
+  }
+
+  /**
+   * Creates a new chapter entry in the Book Database or updates existing one
+   */
+  async upsertChapterEntry(params: {
+    databaseId: string;
+    existingPageId?: string | null;
+    title: string;
+    order: number;
+    status: "Chưa dịch" | "Bản nháp" | "Đã hoàn thành";
+    tags: string[];
+    words: number;
+    filePath: string;
+    fileHash: string;
+    blocks: any[];
+    iconEmoji?: string;
+  }): Promise<{ pageId: string; action: "created" | "updated" | "skipped" }> {
+    const properties: any = {
+      Title: {
+        title: [
+          {
+            text: {
+              content: params.title,
+            },
+          },
+        ],
+      },
+      Order: {
+        number: params.order,
+      },
+      Status: {
+        select: {
+          name: params.status,
+        },
+      },
+      Tags: {
+        multi_select: params.tags.map((t) => ({ name: t.replace(/,/g, "") })),
+      },
+      Words: {
+        number: params.words,
+      },
+      FilePath: {
+        rich_text: [
+          {
+            text: {
+              content: params.filePath,
+            },
+          },
+        ],
+      },
+      FileHash: {
+        rich_text: [
+          {
+            text: {
+              content: params.fileHash,
+            },
+          },
+        ],
+      },
+    };
+
+    const icon = params.iconEmoji
+      ? { type: "emoji" as const, emoji: params.iconEmoji }
+      : { type: "emoji" as const, emoji: "📄" };
+
+    if (params.existingPageId) {
+      // Update properties
+      await withRetry(async () => {
+        await this.client.pages.update({
+          page_id: params.existingPageId!,
+          properties,
+          icon,
+        });
+      });
+
+      // Clear existing blocks (retrieve children and delete) and append new blocks
+      const existingBlocks = await this.getAllBlockChildren(
+        params.existingPageId,
+        false
+      );
+      for (const b of existingBlocks) {
+        try {
+          await withRetry(async () => {
+            await this.client.blocks.delete({ block_id: b.id });
+          });
+        } catch {
+          // ignore block deletion error
+        }
+      }
+
+      // Append new blocks
+      if (params.blocks.length > 0) {
+        await this.appendBlocksChunked(params.existingPageId, params.blocks);
+      }
+
+      return { pageId: params.existingPageId, action: "updated" };
+    } else {
+      // Create new page
+      const initialBlocks = params.blocks.slice(0, 100);
+      const remainingBlocks = params.blocks.slice(100);
+
+      const createdPage = await withRetry(async () => {
+        return await this.client.pages.create({
+          parent: { database_id: params.databaseId },
+          properties,
+          icon,
+          children: initialBlocks.length > 0 ? initialBlocks : undefined,
+        });
+      });
+
+      if (remainingBlocks.length > 0) {
+        await this.appendBlocksChunked(createdPage.id, remainingBlocks);
+      }
+
+      return { pageId: createdPage.id, action: "created" };
+    }
+  }
 }
+
