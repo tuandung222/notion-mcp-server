@@ -1,4 +1,5 @@
 import { parseMarkdownToRichText, NotionRichTextItem } from "./rich-text.js";
+import { createSafeMermaidNotionBlocks } from "./mermaid-sanitizer.js";
 
 /**
  * Valid Notion code block languages
@@ -49,14 +50,18 @@ export function markdownToNotionBlocks(markdown: string): any[] {
       if (inCodeBlock) {
         // Closing code block
         const codeContent = codeBuffer.join("\n");
-        blocks.push({
-          object: "block",
-          type: "code",
-          code: {
-            rich_text: parseMarkdownToRichText(codeContent),
-            language: codeLanguage,
-          },
-        });
+        if (codeLanguage === "mermaid") {
+          blocks.push(...createSafeMermaidNotionBlocks(codeContent));
+        } else {
+          blocks.push({
+            object: "block",
+            type: "code",
+            code: {
+              rich_text: parseMarkdownToRichText(codeContent),
+              language: codeLanguage,
+            },
+          });
+        }
         inCodeBlock = false;
         codeBuffer = [];
         codeLanguage = "plain text";
@@ -195,14 +200,19 @@ export function markdownToNotionBlocks(markdown: string): any[] {
 
   // If file ended while still in code block, flush it
   if (inCodeBlock && codeBuffer.length > 0) {
-    blocks.push({
-      object: "block",
-      type: "code",
-      code: {
-        rich_text: parseMarkdownToRichText(codeBuffer.join("\n")),
-        language: codeLanguage,
-      },
-    });
+    const codeContent = codeBuffer.join("\n");
+    if (codeLanguage === "mermaid") {
+      blocks.push(...createSafeMermaidNotionBlocks(codeContent));
+    } else {
+      blocks.push({
+        object: "block",
+        type: "code",
+        code: {
+          rich_text: parseMarkdownToRichText(codeContent),
+          language: codeLanguage,
+        },
+      });
+    }
   }
 
   return blocks;
