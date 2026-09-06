@@ -1,16 +1,22 @@
 # Dependencies
 node_modules/
 server/node_modules/
+**/node_modules/
 
 # Build Output
 dist/
 server/dist/
+**/dist/
 
-# Environment Variables
+# Environment Variables & Secrets (CRITICAL: Never commit keys)
 .env
-.env.local
-server/.env
-server/.env.local
+.env.*
+*.env
+*.env.*
+**/.env
+**/.env.*
+**/*.local
+**/mcp_config.local.json
 
 # Upstream References & Clones
 reference/

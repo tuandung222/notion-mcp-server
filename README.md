@@ -78,7 +78,14 @@ Notion MCP/
 │   ├── package.json
 │   ├── tsconfig.json
 │   └── tsup.config.ts
-├── skills/                        # Antigravity Agent Skill
+├── plugins/                       # Antigravity All-in-One Plugin bundle
+│   └── notion-publisher/
+│       ├── plugin.json            # Plugin manifest
+│       ├── mcp_config.json        # Auto-launches Custom Notion MCP Server
+│       └── skills/                # Bundled skills
+│           └── notion-book-publisher/
+│               └── SKILL.md
+├── skills/                        # Standalone Antigravity Agent Skill
 │   └── notion-book-publisher/
 │       └── SKILL.md               # Playbook instructing agents on book publishing
 ├── examples/                      # Sample books & tutorial series

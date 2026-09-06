@@ -1,0 +1,6 @@
+{
+  "name": "notion-publisher",
+  "description": "All-in-one Notion publishing plugin for technical books, tutorials, and interactive documentation with built-in MCP server, auto-healing Mermaid diagrams, and HTML embeds.",
+  "version": "1.0.0",
+  "author": "tuandung222"
+}

@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "notion-mcp-server": {
+      "command": "node",
+      "args": [
+        "./server/dist/index.js"
+      ],
+      "env": {
+        "NOTION_API_KEY": "YOUR_NOTION_API_KEY_HERE",
+        "NOTION_VERSION": "2022-06-28"
+      }
+    }
+  }
+}
