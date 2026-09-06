@@ -5,19 +5,19 @@
 [![Model Context Protocol](https://img.shields.io/badge/MCP-1.6.1-green.svg)](https://modelcontextprotocol.io/)
 [![Notion API](https://img.shields.io/badge/Notion%20API-2022--06--28-black.svg)](https://developers.notion.com/)
 
-An enhanced, enterprise-grade **Model Context Protocol (MCP)** server for Notion, engineered specifically for **AI Coding Assistants** (Google Antigravity, Claude Desktop, Cursor) to automate **technical book translations**, **multi-chapter tutorial series**, and **interactive engineering documentation**.
+An enterprise-grade **Model Context Protocol (MCP)** server for Notion, engineered specifically for **AI Coding Assistants** (Google Antigravity, Claude Desktop, Cursor). It empowers AI agents to seamlessly author, translate, and publish **multi-chapter technical books**, **long-form tutorial series**, and **interactive engineering documentation** directly into Notion.
 
 ---
 
 ## 🌟 Why This Custom MCP Server?
 
-The official Notion MCP server (`@notionhq/notion-mcp-server`) acts only as a raw OpenAPI wrapper exposing 24 low-level endpoints with heavy JSON payloads. It lacks intelligence for everyday content creation, causing rate-limiting crashes, broken Markdown formatting, and unhandled Mermaid syntax errors.
+The official Notion MCP server (`@notionhq/notion-mcp-server`) operates strictly as an OpenAPI wrapper, exposing 24 raw, low-level HTTP endpoints that require verbose JSON schemas. It lacks domain intelligence for real-world publishing workflows, resulting in rate-limiting failures, broken inline Markdown formatting, and unhandled Mermaid syntax errors.
 
-**Custom Notion MCP Server** solves all of these problems out of the box:
+**Custom Notion MCP Server** bridges this gap with high-level, production-ready tools:
 
 ```mermaid
 graph LR
-    subgraph Local [Local Development]
+    subgraph Local [Local Workspace]
         A[Markdown Folder / Book] --> B[AI Coding Assistant]
     end
 
@@ -30,7 +30,7 @@ graph LR
         E --> F
     end
 
-    subgraph Notion [Notion Cloud Workspace]
+    subgraph Notion [Notion Workspace]
         F -->|Batch 100 / Exponential Backoff| G[(Master Book Hub & Database)]
     end
 ```
@@ -39,136 +39,144 @@ graph LR
 
 ## 📊 Comparison: Official vs. Custom Notion MCP Server
 
-| Tính năng | Official `@notionhq/notion-mcp-server` | Custom Notion MCP Server (Repo này) |
+| Feature | Official `@notionhq/notion-mcp-server` | Custom Notion MCP Server (This Repo) |
 | :--- | :--- | :--- |
-| **Xuất bản Sách & Series** | ❌ Không hỗ trợ, phải tạo thủ công từng trang | ✅ **`notion_sync_book_database`**: Tự quét folder, tạo Master Page + Inline Database, tự làm thanh điều hướng `[Prev/Next]`. |
-| **Đồng bộ gia tăng (Incremental Sync)**| ❌ Không có, mỗi lần push là tạo trang trùng lặp | ✅ **Checksum SHA256**: Chỉ cập nhật những chương có nội dung thay đổi, tự động bỏ qua (Skipped) nếu không đổi. |
-| **Mermaid Diagrams** | ⚠️ Thường xuyên bị lỗi đỏ cú pháp từ LLM | ✅ **`MermaidSanitizer`**: Tự động bọc ngoặc kép nhãn, bù thẻ `end`, nắn mũi tên, và **Graceful Fallback** chống màn hình đỏ Notion. |
-| **Interactive HTML Embed** | ❌ Không hỗ trợ | ✅ **`notion_insert_html_embed`**: Nhúng dashboard, benchmark report, biểu đồ động (Chart.js/ECharts) trực tiếp qua iframe. |
-| **Inline Markdown Formatting** | ❌ Gửi raw markdown `**bold**`, Notion hiển thị nguyên xi | ✅ **Inline Tokenizer**: Tự bóc tách `**bold**`, `*italic*`, `` `code` ``, `[link]` sang `rich_text` annotations chuẩn Notion. |
-| **Bảo vệ Tràn Ký Tự** | ❌ Lỗi HTTP 400 nếu đoạn văn > 2000 ký tự | ✅ Tự động chia nhỏ (chunk) các đoạn văn bản dài mà vẫn bảo toàn định dạng inline. |
-| **Rate Limit 429 & Giới Hạn 100 Blocks** | ❌ Crash khi dính 429 hoặc danh sách > 100 blocks | ✅ Tự động chia batch 100 blocks, nghỉ 350ms và **Exponential Backoff retry** tự phục hồi socket. |
-| **Đọc Ngược Trang (Readback)** | ⚠️ Trả về JSON blocks thô, tốn token của LLM | ✅ Tự động đệ quy và dịch ngược cây blocks Notion thành **Markdown sạch sẽ**. |
+| **Book & Series Publishing** | ❌ None. Manual page-by-page creation required | ✅ **`notion_sync_book_database`**: Scans folders, creates Master Pages + Inline Databases, and generates previous/next footer navigation. |
+| **Incremental Sync** | ❌ None. Repeated syncs duplicate pages | ✅ **SHA-256 Checksums**: Only updates modified chapters while safely skipping unchanged files (`Skipped (No change)`). |
+| **Mermaid Diagrams** | ⚠️ Unhandled. Broken LLM syntax causes red Notion error blocks | ✅ **`MermaidSanitizer`**: Auto-quotes special characters in node labels, balances `subgraph ... end`, and applies **Graceful Fallback** to avoid red errors. |
+| **Interactive HTML Embeds** | ❌ Not supported | ✅ **`notion_insert_html_embed`**: Embeds interactive HTML5 dashboards, benchmark charts, and simulators via native Notion iframe embeds. |
+| **Inline Markdown Parsing** | ❌ Raw markdown (`**bold**`) is sent as plain text | ✅ **Native Tokenizer**: Converts `**bold**`, `*italic*`, `` `code` ``, `[links]` into Notion `rich_text` annotations. |
+| **Character Limit Protection** | ❌ HTTP 400 error when text exceeds 2000 characters | ✅ Automatically chunks long text into segments `<= 2000` chars while preserving annotations. |
+| **Rate Limit 429 & Chunking** | ❌ Crashes on rate limits or payloads with > 100 blocks | ✅ Automatically batches into 100-block chunks with 350ms delays and **Exponential Backoff** retry logic. |
+| **Page Reverse Conversion** | ⚠️ Returns raw nested JSON blocks, wasting LLM tokens | ✅ Recursively reads block hierarchies and converts them back into **clean, readable Markdown**. |
 
 ---
 
-## 📁 Cấu Trúc Dự Án (Workspace Architecture)
+## 📁 Repository Architecture
 
 ```text
 Notion MCP/
-├── server/                        # Mã nguồn Custom Notion MCP Server (TypeScript)
+├── server/                        # Custom Notion MCP Server source code (TypeScript)
 │   ├── src/
-│   │   ├── client/                # Notion Service với Auto-Retry & Rate Limiter
+│   │   ├── client/                # Notion Service with Auto-Retry & Rate Limiter
 │   │   │   ├── notion-client.ts
 │   │   │   └── rate-limiter.ts
-│   │   ├── converters/            # Các bộ chuyển đổi dữ liệu thông minh
-│   │   │   ├── folder-scanner.ts  # Quét folder sách, parse frontmatter, checksum hash
-│   │   │   ├── markdown-parser.ts # Chuyển đổi 2 chiều Markdown <-> Notion Blocks
-│   │   │   ├── mermaid-sanitizer.ts # Auto-Healer cho sơ đồ Mermaid của LLM
-│   │   │   └── rich-text.ts       # Tokenizer inline formatting annotations
-│   │   ├── tools/                 # Các công cụ MCP đăng ký với AI Agent
+│   │   ├── converters/            # Domain converters & sanitizers
+│   │   │   ├── folder-scanner.ts  # Directory walker, frontmatter parser, SHA-256 hashing
+│   │   │   ├── markdown-parser.ts # Bi-directional Markdown <-> Notion Block converter
+│   │   │   ├── mermaid-sanitizer.ts # Auto-healer & graceful fallback for Mermaid
+│   │   │   └── rich-text.ts       # Inline formatting & 2000-char safety tokenizer
+│   │   ├── tools/                 # Registered MCP tools
 │   │   │   ├── book-tools.ts      # notion_sync_book_database
 │   │   │   ├── html-embed-tools.ts# notion_insert_html_embed
 │   │   │   ├── markdown-tools.ts  # notion_append_markdown
 │   │   │   ├── mermaid-tools.ts   # notion_insert_mermaid
 │   │   │   ├── page-tools.ts      # notion_get_page_content, notion_create_page
 │   │   │   └── search-tools.ts    # notion_search
-│   │   └── index.ts               # Entry point MCP Stdio Server
-│   ├── test/                      # Bộ unit test độc lập
+│   │   └── index.ts               # MCP Server Stdio entry point
+│   ├── test/                      # Comprehensive test suites
 │   ├── package.json
 │   ├── tsconfig.json
 │   └── tsup.config.ts
-├── skills/                        # Kỹ năng Agent (Antigravity Agent Skill)
+├── skills/                        # Antigravity Agent Skill
 │   └── notion-book-publisher/
-│       └── SKILL.md               # Playbook hướng dẫn Agent viết & xuất bản sách
-├── examples/                      # Các dự án sách & series tutorial mẫu
-│   └── llm-serving-handbook/      # Cẩm nang 3 chương kỹ thuật có Mermaid & Metadata
-└── references/                    # Mã nguồn upstream của NotionHQ (nằm trong .gitignore)
+│       └── SKILL.md               # Playbook instructing agents on book publishing
+├── examples/                      # Sample books & tutorial series
+│   └── llm-serving-handbook/      # 3-chapter technical handbook with Mermaid diagrams
+└── references/                    # Upstream NotionHQ reference (ignored in git)
 ```
 
 ---
 
-## 🛠️ Danh Sách Công Cụ (MCP Tools Reference)
+## 🛠️ MCP Tools Reference
 
-### 1. `notion_sync_book_database` *(Cốt lõi)*
-- **Chức năng**: Quét thư mục Markdown cục bộ và xuất bản thành một cuốn sách hoàn chỉnh trên Notion.
-- **Tham số**:
-  - `folder_path` *(string, bắt buộc)*: Đường dẫn tuyệt đối tới thư mục Markdown.
-  - `parent_page_id` *(string, bắt buộc)*: ID của trang Notion cha.
-  - `book_title` *(string, tùy chọn)*: Tiêu đề cuốn sách (mặc định lấy tên thư mục).
-  - `book_icon` *(string, tùy chọn)*: Emoji trang bìa (mặc định: `📚`).
-  - `enable_footer_nav` *(boolean, mặc định: `true`)*: Tự động chèn thanh điều hướng `[⬅️ Chương trước] • [Mục lục] • [Chương sau ➡️]` ở chân mỗi trang.
-  - `force_update` *(boolean, mặc định: `false`)*: Ép cập nhật lại toàn bộ dù mã băm không đổi.
+### 1. `notion_sync_book_database` *(Core Publishing Engine)*
+- **Description**: Scans a local directory of Markdown files and publishes them as a structured Master Book Hub with an Inline Database for progress tracking.
+- **Parameters**:
+  - `folder_path` *(string, required)*: Absolute path to the directory containing `.md` files.
+  - `parent_page_id` *(string, required)*: Parent Notion Page ID where the book will reside.
+  - `book_title` *(string, optional)*: Title of the book (defaults to folder name).
+  - `book_icon` *(string, default: `📚`)*: Emoji icon for the Master Page.
+  - `enable_footer_nav` *(boolean, default: `true`)*: Automatically generates previous/next chapter navigation links at the footer of each page.
+  - `force_update` *(boolean, default: `false`)*: Forces re-upload of all chapters regardless of checksum matches.
 
-### 2. `notion_insert_html_embed` *(Mới)*
-- **Chức năng**: Nhúng một trang HTML/dashboard tương tác vào trang Notion qua thẻ `embed` iframe native.
-- **Tham số**: `page_id`, `url` (URL công khai của file HTML), `caption`.
+### 2. `notion_insert_html_embed` *(Interactive Visualization)*
+- **Description**: Inserts an interactive HTML Embed block into a Notion page, rendering live HTML5 dashboards, benchmark charts, and visual simulators in a sandboxed iframe.
+- **Parameters**:
+  - `page_id` *(string, required)*: Target page or block ID.
+  - `url` *(string, required)*: Public URL of the HTML document (e.g. hosted on GitHub Pages, S3, or Vercel).
+  - `caption` *(string, optional)*: Caption text displayed below the embed.
 
 ### 3. `notion_insert_mermaid`
-- **Chức năng**: Chèn sơ đồ Mermaid vector SVG responsive với bộ tự sửa lỗi cú pháp `MermaidSanitizer`.
-- **Tham số**: `block_id`, `mermaid_code`, `caption`.
+- **Description**: Inserts a native Mermaid diagram block (`language: "mermaid"`) with automatic syntax healing (auto-quoting, subgraph balancing, arrow normalization) and graceful fallback.
+- **Parameters**: `block_id`, `mermaid_code`, `caption`.
 
 ### 4. `notion_append_markdown`
-- **Chức năng**: Parse chuỗi Markdown và chèn vào Notion. Tự động bóc tách inline formatting sang `rich_text` annotations và chia đợt 100 blocks an toàn.
+- **Description**: Parses standard Markdown text and safely appends it to a Notion page in 100-block chunks with proper inline formatting annotations.
+- **Parameters**: `block_id`, `markdown`.
 
 ### 5. `notion_get_page_content`
-- **Chức năng**: Đọc toàn bộ nội dung của một trang Notion (kể cả khối con lồng nhau) và chuyển đổi ngược thành Markdown sạch sẽ cho AI đọc.
+- **Description**: Recursively retrieves all child blocks of a Notion page and converts them back into clean Markdown or structured JSON.
+- **Parameters**: `page_id`, `format` (`"markdown"` | `"json"`), `recursive` (boolean), `max_depth` (number).
 
 ### 6. `notion_create_page` & `notion_search`
-- **Chức năng**: Tạo trang mới có icon/cover hoặc tìm kiếm nhanh trang/database trong workspace.
+- **Description**: Creates new standalone pages or searches pages and databases across the workspace.
 
 ---
 
-## 🚀 Cài Đặt & Chạy Thử Nghiệm
+## 🚀 Getting Started
 
-### 1. Cài đặt dependencies
+### 1. Installation
+Clone the repository and install dependencies in the `server` directory:
 ```bash
-cd server
+git clone https://github.com/tuandung222/notion-mcp-server.git
+cd notion-mcp-server/server
 npm install
 ```
 
-### 2. Cấu hình biến môi trường
-Tạo file `server/.env`:
+### 2. Environment Configuration
+Create a `.env` file inside the `server/` directory:
 ```env
 NOTION_API_KEY=ntn_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 NOTION_VERSION=2022-06-28
 ```
+*(The server also supports legacy `OPENAPI_MCP_HEADERS` for backward compatibility).*
 
-### 3. Build bundle
+### 3. Build Bundle
 ```bash
 npm run build
 ```
-File bundle độc lập sẽ được sinh tại `server/dist/index.js`.
+The compiled single-file bundle will be generated at `server/dist/index.js`.
 
-### 4. Chạy bộ kiểm thử (Tests)
+### 4. Running Test Suites
 ```bash
-# Kiểm tra bộ chuyển đổi Markdown & RichText
+# Test Markdown & RichText tokenizers
 npx tsx test/test-converters.ts
 
-# Kiểm tra bộ tự sửa lỗi cú pháp Mermaid (5 test cases)
+# Test Mermaid auto-healing & graceful fallback (5 test cases)
 npx tsx test/test-mermaid-sanitizer.ts
 
-# Kiểm tra bộ nhúng HTML Embed & iframe
+# Test HTML Embed & iframe parser
 npx tsx test/test-html-embed.ts
 
-# Chạy nghiệm thu đồng bộ sách trực tiếp lên Notion
+# Run live end-to-end book sync test against Notion
 npx tsx test/test-sync-book.ts
 ```
 
 ---
 
-## ⚙️ Cấu Hình Với AI Coding Assistants (MCP Clients)
+## ⚙️ MCP Client Configuration
 
-Thêm cấu hình sau vào tệp cấu hình MCP của bạn (`mcp_config.json`):
+Add this configuration to your assistant's MCP configuration file (`mcp_config.json`):
 
-### Dành cho Google Antigravity / Claude Desktop / Cursor:
+### For Google Antigravity / Claude Desktop / Cursor:
 ```json
 {
   "mcpServers": {
     "notion-mcp-server": {
       "command": "node",
       "args": [
-        "/Users/admin/Desktop/Recents/Notion MCP/server/dist/index.js"
+        "/absolute/path/to/notion-mcp-server/server/dist/index.js"
       ],
       "env": {
         "NOTION_API_KEY": "ntn_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
@@ -181,16 +189,16 @@ Thêm cấu hình sau vào tệp cấu hình MCP của bạn (`mcp_config.json`)
 
 ---
 
-## 🧠 Tích Hợp Antigravity Agent Skill
+## 🧠 Antigravity Agent Skill Integration
 
-Dự án đi kèm Agent Skill chuẩn tại [`skills/notion-book-publisher/SKILL.md`](skills/notion-book-publisher/SKILL.md). Kỹ năng này dạy cho AI Agent:
-1. Cách lập dàn ý, chia nhỏ chương mục và chuẩn hóa thuật ngữ tiếng Anh - Việt khi dịch sách.
-2. Quy tắc lựa chọn: Khi nào dùng **Native Mermaid Vector**, khi nào dùng **HTML Embed Dashboard**.
-3. Tự động kích hoạt công cụ `notion_sync_book_database` sau khi biên soạn xong để xuất bản lên Notion.
+This repository includes a ready-to-use Agent Skill located at [`skills/notion-book-publisher/SKILL.md`](skills/notion-book-publisher/SKILL.md). The skill instructs AI agents on:
+1. Structuring book outlines, chapter frontmatter (`title`, `order`, `tags`, `status`), and technical glossary consistency.
+2. Formatting decisions: When to use **Native Mermaid Vectors** vs. **Interactive HTML Embeds**.
+3. Triggering the `notion_sync_book_database` tool upon completing translations or chapters.
 
 ---
 
-## 👤 Tác Giả & Đóng Góp
+## 👤 Author & Contributions
 - **Repository**: [https://github.com/tuandung222/notion-mcp-server](https://github.com/tuandung222/notion-mcp-server)
-- **Contributor**: [tuandung222](https://github.com/tuandung222)
+- **Author**: [tuandung222](https://github.com/tuandung222)
 - **License**: MIT
