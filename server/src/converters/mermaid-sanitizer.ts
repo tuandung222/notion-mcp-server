@@ -218,6 +218,27 @@ export function sanitizeMermaidCode(rawCode: string): MermaidSanitizeResult {
  * - If invalid: returns code block with language 'plain text' and a gentle warning callout
  *   so Notion NEVER displays an ugly red error banner.
  */
+function chunkTextToRichText(text: string, maxLen: number = 2000): any[] {
+  if (!text) return [];
+  if (text.length <= maxLen) {
+    return [{ type: "text", text: { content: text } }];
+  }
+  const items: any[] = [];
+  for (let i = 0; i < text.length; i += maxLen) {
+    items.push({
+      type: "text",
+      text: { content: text.slice(i, i + maxLen) }
+    });
+  }
+  return items;
+}
+
+/**
+ * Creates safe Notion blocks for a Mermaid diagram:
+ * - If valid: returns native code block with language 'mermaid'.
+ * - If invalid: returns code block with language 'plain text' and a gentle warning callout
+ *   so Notion NEVER displays an ugly red error banner.
+ */
 export function createSafeMermaidNotionBlocks(rawCode: string, caption?: string): any[] {
   const result = sanitizeMermaidCode(rawCode);
 
@@ -226,27 +247,13 @@ export function createSafeMermaidNotionBlocks(rawCode: string, caption?: string)
       object: "block",
       type: "code",
       code: {
-        rich_text: [
-          {
-            type: "text",
-            text: {
-              content: result.code,
-            },
-          },
-        ],
+        rich_text: chunkTextToRichText(result.code),
         language: "mermaid",
       },
     };
 
     if (caption) {
-      block.code.caption = [
-        {
-          type: "text",
-          text: {
-            content: caption,
-          },
-        },
-      ];
+      block.code.caption = chunkTextToRichText(caption);
     }
 
     return [block];
@@ -275,17 +282,11 @@ export function createSafeMermaidNotionBlocks(rawCode: string, caption?: string)
     object: "block",
     type: "code",
     code: {
-      rich_text: [
-        {
-          type: "text",
-          text: {
-            content: rawCode,
-          },
-        },
-      ],
+      rich_text: chunkTextToRichText(rawCode),
       language: "plain text",
     },
   };
 
   return [warningCallout, plainCodeBlock];
+
 }

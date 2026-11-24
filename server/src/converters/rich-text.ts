@@ -8,10 +8,13 @@
  */
 
 export interface NotionRichTextItem {
-  type: "text";
-  text: {
+  type: "text" | "equation";
+  text?: {
     content: string;
     link?: { url: string } | null;
+  };
+  equation?: {
+    expression: string;
   };
   annotations?: {
     bold?: boolean;
@@ -79,6 +82,33 @@ function chunkText(
   return items;
 }
 
+function appendRestored(
+  results: NotionRichTextItem[],
+  text: string,
+  codeSpans: string[],
+  mathSpans: string[],
+  annotations: NotionRichTextItem["annotations"] = {}
+): void {
+  if (!text) return;
+  const parts = text.split(/(\u0000(?:CODE|MATH)_\d+\u0000)/);
+  for (const p of parts) {
+    const codeMatch = p.match(/^\u0000CODE_(\d+)\u0000$/);
+    const mathMatch = p.match(/^\u0000MATH_(\d+)\u0000$/);
+    if (codeMatch) {
+      const idx = parseInt(codeMatch[1], 10);
+      results.push(...chunkText(codeSpans[idx], null, { code: true, ...(annotations || {}) }));
+    } else if (mathMatch) {
+      const idx = parseInt(mathMatch[1], 10);
+      results.push({
+        type: "equation",
+        equation: { expression: mathSpans[idx].trim() },
+      });
+    } else if (p.length > 0) {
+      results.push(...chunkText(p, null, annotations));
+    }
+  }
+}
+
 /**
  * Parses markdown inline text into an array of Notion RichTextItem objects
  */
@@ -87,26 +117,35 @@ export function parseMarkdownToRichText(input: string): NotionRichTextItem[] {
     return [];
   }
 
-  const results: NotionRichTextItem[] = [];
+  // Step 1: Protect inline code spans (`...`) and inline math ($...$)
+  const codeSpans: string[] = [];
+  const mathSpans: string[] = [];
+  let protectedText = input.replace(/`([^`]+?)`/g, (_, code) => {
+    const idx = codeSpans.length;
+    codeSpans.push(code);
+    return `\u0000CODE_${idx}\u0000`;
+  });
 
-  // Match Markdown inline elements:
-  // 1. Links: [text](url)
-  // 2. Bold+Italic: ***text*** or ___text___
-  // 3. Bold: **text** or __text__
-  // 4. Italic: *text* or _text_
-  // 5. Strikethrough: ~~text~~
-  // 6. Code: `text`
+  // Protect inline math: $formula$ (exclude $$ which is block math)
+  protectedText = protectedText.replace(/(?<!\$)\$(?!\$)(.+?)(?<!\$)\$(?!\$)/g, (_, math) => {
+    const idx = mathSpans.length;
+    mathSpans.push(math);
+    return `\u0000MATH_${idx}\u0000`;
+  });
+
+  // Step 2: Parse Markdown inline elements with strict precedence:
   const regex =
-    /(\[(.+?)\]\((https?:\/\/[^\s\)]+)\))|(\*\*\*(.+?)\*\*\*|___(.+?)___)|(\*\*(.+?)\*\*|__(.+?)__)|(\*(.+?)\*|_(.+?)_)|(~~(.+?)~~)|(`(.+?)`)/g;
+    /(\[(.+?)\]\((https?:\/\/[^\s\)]+)\))|(\*\*\*(.+?)\*\*\*|___(.+?)___)|(\*\*(.+?)\*\*|__(.+?)__)|(\*(.+?)\*|(?<!\w)_(.+?)_(?!\w))|(~~(.+?)~~)|(\u0000CODE_(\d+)\u0000)|(\u0000MATH_(\d+)\u0000)/g;
 
+  const results: NotionRichTextItem[] = [];
   let lastIndex = 0;
   let match: RegExpExecArray | null;
 
-  while ((match = regex.exec(input)) !== null) {
+  while ((match = regex.exec(protectedText)) !== null) {
     // Text before match
     if (match.index > lastIndex) {
-      const plainText = input.slice(lastIndex, match.index);
-      results.push(...chunkText(plainText));
+      const plainText = protectedText.slice(lastIndex, match.index);
+      appendRestored(results, plainText, codeSpans, mathSpans);
     }
 
     if (match[1]) {
@@ -117,33 +156,41 @@ export function parseMarkdownToRichText(input: string): NotionRichTextItem[] {
     } else if (match[4]) {
       // Bold + Italic: ***text***
       const content = match[5] || match[6];
-      results.push(...chunkText(content, null, { bold: true, italic: true }));
+      appendRestored(results, content, codeSpans, mathSpans, { bold: true, italic: true });
     } else if (match[7]) {
       // Bold: **text**
       const content = match[8] || match[9];
-      results.push(...chunkText(content, null, { bold: true }));
+      appendRestored(results, content, codeSpans, mathSpans, { bold: true });
     } else if (match[10]) {
-      // Italic: *text*
+      // Italic: *text* or _text_
       const content = match[11] || match[12];
-      results.push(...chunkText(content, null, { italic: true }));
+      appendRestored(results, content, codeSpans, mathSpans, { italic: true });
     } else if (match[13]) {
       // Strikethrough: ~~text~~
       const content = match[14];
-      results.push(...chunkText(content, null, { strikethrough: true }));
+      appendRestored(results, content, codeSpans, mathSpans, { strikethrough: true });
     } else if (match[15]) {
-      // Inline Code: `text`
-      const content = match[16];
-      results.push(...chunkText(content, null, { code: true }));
+      // Protected Code Span placeholder
+      const codeIdx = parseInt(match[16], 10);
+      results.push(...chunkText(codeSpans[codeIdx], null, { code: true }));
+    } else if (match[17]) {
+      // Protected Math Span placeholder
+      const mathIdx = parseInt(match[18], 10);
+      results.push({
+        type: "equation",
+        equation: { expression: mathSpans[mathIdx].trim() },
+      });
     }
 
     lastIndex = regex.lastIndex;
   }
 
   // Trailing text after the last match
-  if (lastIndex < input.length) {
-    const remainingText = input.slice(lastIndex);
-    results.push(...chunkText(remainingText));
+  if (lastIndex < protectedText.length) {
+    const remainingText = protectedText.slice(lastIndex);
+    appendRestored(results, remainingText, codeSpans, mathSpans);
   }
 
   return results;
 }
+

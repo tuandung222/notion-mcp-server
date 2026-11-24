@@ -30,6 +30,21 @@ function normalizeCodeLanguage(lang: string): string {
   return "plain text";
 }
 
+function chunkCodeText(code: string, maxLen: number = 2000): any[] {
+  if (!code) return [];
+  if (code.length <= maxLen) {
+    return [{ type: "text", text: { content: code } }];
+  }
+  const items: any[] = [];
+  for (let i = 0; i < code.length; i += maxLen) {
+    items.push({
+      type: "text",
+      text: { content: code.slice(i, i + maxLen) }
+    });
+  }
+  return items;
+}
+
 /**
  * Parses a markdown document string into an array of Notion Block objects
  */
@@ -70,11 +85,12 @@ export function markdownToNotionBlocks(markdown: string): any[] {
             object: "block",
             type: "code",
             code: {
-              rich_text: parseMarkdownToRichText(codeContent),
+              rich_text: chunkCodeText(codeContent),
               language: codeLanguage,
             },
           });
         }
+
         inCodeBlock = false;
         codeBuffer = [];
         codeLanguage = "plain text";
@@ -126,6 +142,35 @@ export function markdownToNotionBlocks(markdown: string): any[] {
       continue;
     }
 
+    // Block Equation ($$ ... $$)
+    if (trimmed.startsWith("$$")) {
+      if (trimmed.endsWith("$$") && trimmed.length > 2) {
+        const expr = trimmed.slice(2, -2).trim();
+        blocks.push({
+          object: "block",
+          type: "equation",
+          equation: { expression: expr },
+        });
+        continue;
+      } else {
+        const eqLines: string[] = [];
+        i++;
+        while (i < lines.length && !lines[i].trim().endsWith("$$")) {
+          eqLines.push(lines[i]);
+          i++;
+        }
+        if (i < lines.length && lines[i].trim() !== "$$") {
+          eqLines.push(lines[i].trim().replace(/\$\$$/, ""));
+        }
+        blocks.push({
+          object: "block",
+          type: "equation",
+          equation: { expression: eqLines.join("\n").trim() },
+        });
+        continue;
+      }
+    }
+
     // Heading 1 (# ...)
     if (line.startsWith("# ")) {
       blocks.push({
@@ -150,16 +195,63 @@ export function markdownToNotionBlocks(markdown: string): any[] {
       continue;
     }
 
-    // Heading 3 (### ...)
-    if (line.startsWith("### ")) {
+    // Heading 3 or deeper (### ..., #### ...)
+    if (/^#{3,}\s+/.test(line)) {
+      const content = line.replace(/^#{3,}\s+/, "").trim();
       blocks.push({
         object: "block",
         type: "heading_3",
         heading_3: {
-          rich_text: parseMarkdownToRichText(line.slice(4).trim()),
+          rich_text: parseMarkdownToRichText(content),
         },
       });
       continue;
+    }
+
+    // Table block (| col1 | col2 |)
+    if (trimmed.startsWith("|") && trimmed.endsWith("|")) {
+      const tableLines: string[] = [];
+      while (i < lines.length && lines[i].trim().startsWith("|") && lines[i].trim().endsWith("|")) {
+        tableLines.push(lines[i].trim());
+        i++;
+      }
+      i--; // adjust loop index
+
+      // Filter out separator lines like |:---|:---:|---|
+      const dataRows = tableLines.filter((l) => !/^\|(\s*:?-+:?\s*\|)+$/.test(l));
+      if (dataRows.length > 0) {
+        const parsedRows = dataRows.map((row) => {
+          const inner = row.slice(1, -1);
+          const cells = inner.split("|").map((c) => parseMarkdownToRichText(c.trim()));
+          return cells;
+        });
+
+        const tableWidth = Math.max(...parsedRows.map((r) => r.length));
+        const normalizedRows = parsedRows.map((row) => {
+          while (row.length < tableWidth) {
+            row.push([]);
+          }
+          return {
+            object: "block",
+            type: "table_row",
+            table_row: {
+              cells: row,
+            },
+          };
+        });
+
+        blocks.push({
+          object: "block",
+          type: "table",
+          table: {
+            table_width: tableWidth,
+            has_column_header: true,
+            has_row_header: false,
+            children: normalizedRows,
+          },
+        });
+        continue;
+      }
     }
 
     // Quote (> ...)
@@ -237,7 +329,7 @@ export function markdownToNotionBlocks(markdown: string): any[] {
         object: "block",
         type: "code",
         code: {
-          rich_text: parseMarkdownToRichText(codeContent),
+          rich_text: chunkCodeText(codeContent),
           language: codeLanguage,
         },
       });
